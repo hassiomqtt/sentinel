@@ -1,5 +1,9 @@
 # Sentinel Module - Log Analytics Workspace and Sentinel Configuration
 
+# Generate UUIDs for automation rule names
+resource "random_uuid" "credential_compromise_rule" {}
+resource "random_uuid" "suspicious_access_rule" {}
+
 resource "azurerm_log_analytics_workspace" "sentinel" {
   name                = var.workspace_name
   location            = var.location
@@ -54,64 +58,56 @@ resource "azurerm_sentinel_data_connector_microsoft_cloud_app_security" "mcas" {
 
 # Automation Rules for triggering Logic Apps
 resource "azurerm_sentinel_automation_rule" "credential_compromise" {
-  name                       = "CredentialCompromiseAutomation"
+  name                       = random_uuid.credential_compromise_rule.result
   log_analytics_workspace_id = azurerm_log_analytics_solution.sentinel.workspace_resource_id
   display_name               = "Credential Compromise - Auto Remediation"
   order                      = 1
   enabled                    = true
 
-  triggers {
-    when = "Created"
-  }
-
-  condition {
-    property = "IncidentTitle"
-    operator = "Contains"
-    values   = ["Credential", "Password", "Authentication"]
-  }
-
-  actions {
-    action_type = "ModifyProperties"
-    order       = 1
-    
-    dynamic "modify_properties" {
-      for_each = [1]
-      content {
-        status   = "Active"
-        severity = "High"
+  condition_json = jsonencode({
+    clauses = [
+      {
+        conditionProperties = {
+          propertyName   = "IncidentTitle"
+          operator       = "Contains"
+          propertyValues = ["Credential", "Password", "Authentication"]
+        }
+        conditionType = "Property"
       }
-    }
+    ]
+    operator = "And"
+  })
+
+  action_incident {
+    order  = 1
+    status = "Active"
   }
 }
 
 resource "azurerm_sentinel_automation_rule" "suspicious_access" {
-  name                       = "SuspiciousAccessAutomation"
+  name                       = random_uuid.suspicious_access_rule.result
   log_analytics_workspace_id = azurerm_log_analytics_solution.sentinel.workspace_resource_id
   display_name               = "Suspicious Access Pattern - Auto Remediation"
   order                      = 2
   enabled                    = true
 
-  triggers {
-    when = "Created"
-  }
-
-  condition {
-    property = "IncidentTitle"
-    operator = "Contains"
-    values   = ["Suspicious", "Anomalous", "Unusual"]
-  }
-
-  actions {
-    action_type = "ModifyProperties"
-    order       = 1
-    
-    dynamic "modify_properties" {
-      for_each = [1]
-      content {
-        status   = "Active"
-        severity = "Medium"
+  condition_json = jsonencode({
+    clauses = [
+      {
+        conditionProperties = {
+          propertyName   = "IncidentTitle"
+          operator       = "Contains"
+          propertyValues = ["Suspicious", "Anomalous", "Unusual"]
+        }
+        conditionType = "Property"
       }
-    }
+    ]
+    operator = "And"
+  })
+
+  action_incident {
+    order  = 1
+    status = "Active"
   }
 }
 
@@ -123,7 +119,7 @@ resource "azurerm_sentinel_alert_rule_scheduled" "failed_login_spike" {
   description                = "Detects abnormal increase in failed login attempts"
   severity                   = "High"
   enabled                    = true
-  
+
   query = <<-QUERY
     SigninLogs
     | where TimeGenerated > ago(1h)
@@ -134,19 +130,19 @@ resource "azurerm_sentinel_alert_rule_scheduled" "failed_login_spike" {
     | where ThreatScore > 50
   QUERY
 
-  query_frequency            = "PT15M"
-  query_period               = "PT1H"
-  trigger_operator           = "GreaterThan"
-  trigger_threshold          = 0
-  suppression_enabled        = false
+  query_frequency     = "PT15M"
+  query_period        = "PT1H"
+  trigger_operator    = "GreaterThan"
+  trigger_threshold   = 0
+  suppression_enabled = false
 
   event_grouping {
     aggregation_method = "AlertPerResult"
   }
 
-  incident_configuration {
-    create_incident = true
-    
+  incident {
+    create_incident_enabled = true
+
     grouping {
       enabled                 = true
       lookback_duration       = "PT6H"
@@ -156,10 +152,10 @@ resource "azurerm_sentinel_alert_rule_scheduled" "failed_login_spike" {
   }
 
   alert_details_override {
-    display_name_format   = "Failed Login Spike: {{UserPrincipalName}}"
-    description_format    = "Detected {{FailedAttempts}} failed attempts from {{IPAddress}}"
-    severity_column_name  = "ThreatScore"
-    tactics_column_name   = "Tactic"
+    display_name_format  = "Failed Login Spike: {{UserPrincipalName}}"
+    description_format   = "Detected {{FailedAttempts}} failed attempts from {{IPAddress}}"
+    severity_column_name = "ThreatScore"
+    tactics_column_name  = "Tactic"
   }
 }
 
@@ -170,10 +166,10 @@ resource "azurerm_sentinel_alert_rule_scheduled" "unusual_location_login" {
   description                = "Detects login attempts from locations not seen in the past 30 days"
   severity                   = "Medium"
   enabled                    = true
-  
+
   query = <<-QUERY
     let historical_locations = SigninLogs
-    | where TimeGenerated between (ago(30d) .. ago(1d))
+    | where TimeGenerated between (ago(14d) .. ago(1d))
     | where ResultType == 0
     | summarize by UserPrincipalName, Location;
     SigninLogs
@@ -183,19 +179,19 @@ resource "azurerm_sentinel_alert_rule_scheduled" "unusual_location_login" {
     | extend ThreatScore = 60
   QUERY
 
-  query_frequency            = "PT1H"
-  query_period               = "P30D"
-  trigger_operator           = "GreaterThan"
-  trigger_threshold          = 0
-  suppression_enabled        = false
+  query_frequency     = "PT1H"
+  query_period        = "P14D"
+  trigger_operator    = "GreaterThan"
+  trigger_threshold   = 0
+  suppression_enabled = false
 
   event_grouping {
     aggregation_method = "AlertPerResult"
   }
 
-  incident_configuration {
-    create_incident = true
-    
+  incident {
+    create_incident_enabled = true
+
     grouping {
       enabled                 = true
       lookback_duration       = "PT12H"

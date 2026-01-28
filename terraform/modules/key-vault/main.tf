@@ -7,14 +7,14 @@ resource "random_string" "kv_suffix" {
 }
 
 resource "azurerm_key_vault" "main" {
-  name                        = "kv-${var.environment}-${random_string.kv_suffix.result}"
-  location                    = var.location
-  resource_group_name         = var.resource_group_name
-  tenant_id                   = var.tenant_id
-  sku_name                    = "standard"
-  soft_delete_retention_days  = 90
-  purge_protection_enabled    = var.environment == "prod"
-  enable_rbac_authorization   = true
+  name                       = "kv-${var.environment}-${random_string.kv_suffix.result}"
+  location                   = var.location
+  resource_group_name        = var.resource_group_name
+  tenant_id                  = var.tenant_id
+  sku_name                   = "standard"
+  soft_delete_retention_days = 90
+  purge_protection_enabled   = var.environment == "prod"
+  enable_rbac_authorization  = true
 
   network_acls {
     default_action             = var.enable_private_endpoint ? "Deny" : "Allow"
@@ -50,14 +50,41 @@ resource "azurerm_role_assignment" "kv_admin" {
 }
 
 ## Variables
-variable "resource_group_name" { type = string }
-variable "location" { type = string }
-variable "environment" { type = string }
-variable "tenant_id" { type = string }
-variable "enable_private_endpoint" { type = bool; default = true }
-variable "subnet_id" { type = string; default = "" }
-variable "admin_object_ids" { type = list(string); default = [] }
-variable "tags" { type = map(string); default = {} }
+variable "resource_group_name" {
+  type = string
+}
+
+variable "location" {
+  type = string
+}
+
+variable "environment" {
+  type = string
+}
+
+variable "tenant_id" {
+  type = string
+}
+
+variable "enable_private_endpoint" {
+  type    = bool
+  default = true
+}
+
+variable "subnet_id" {
+  type    = string
+  default = ""
+}
+
+variable "admin_object_ids" {
+  type    = list(string)
+  default = []
+}
+
+variable "tags" {
+  type    = map(string)
+  default = {}
+}
 
 ## Outputs
 output "key_vault_id" { value = azurerm_key_vault.main.id }

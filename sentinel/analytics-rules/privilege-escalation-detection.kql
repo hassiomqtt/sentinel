@@ -1,0 +1,87 @@
+// Privilege Escalation Detection
+//
+// Detects when users are granted elevated privileges such as Global Admin,
+// Privileged Role Administrator, or added to sensitive groups.
+//
+// Severity: High
+// Tactics: Privilege Escalation, Persistence
+// MITRE ATT&CK: T1078.004 (Cloud Accounts), T1098 (Account Manipulation)
+
+let sensitive_roles = dynamic([
+    "Global Administrator",
+    "Privileged Role Administrator",
+    "Security Administrator",
+    "Exchange Administrator",
+    "SharePoint Administrator",
+    "User Administrator",
+    "Application Administrator",
+    "Cloud Application Administrator",
+    "Intune Administrator",
+    "Azure AD Joined Device Local Administrator"
+]);
+
+let sensitive_groups = dynamic([
+    "Domain Admins",
+    "Enterprise Admins",
+    "Schema Admins",
+    "Administrators",
+    "Account Operators",
+    "Backup Operators"
+]);
+
+// Azure AD Role Assignments
+let role_assignments = AuditLogs
+| where TimeGenerated > ago(24h)
+| where OperationName has_any ("Add member to role", "Add eligible member to role")
+| extend 
+    TargetUser = tostring(TargetResources[0].userPrincipalName),
+    RoleName = tostring(TargetResources[0].modifiedProperties[1].newValue),
+    InitiatedBy = tostring(InitiatedBy.user.userPrincipalName)
+| where RoleName has_any (sensitive_roles)
+| project
+    TimeGenerated,
+    AlertType = "Role Assignment",
+    TargetUser,
+    PrivilegeGranted = RoleName,
+    InitiatedBy,
+    OperationName,
+    Result;
+
+// Group Membership Changes
+let group_changes = AuditLogs
+| where TimeGenerated > ago(24h)
+| where OperationName == "Add member to group"
+| extend 
+    TargetUser = tostring(TargetResources[0].userPrincipalName),
+    GroupName = tostring(TargetResources[0].modifiedProperties[1].newValue),
+    InitiatedBy = tostring(InitiatedBy.user.userPrincipalName)
+| where GroupName has_any (sensitive_groups)
+| project
+    TimeGenerated,
+    AlertType = "Group Membership",
+    TargetUser,
+    PrivilegeGranted = GroupName,
+    InitiatedBy,
+    OperationName,
+    Result;
+
+// Combine results
+union role_assignments, group_changes
+| extend 
+    Severity = case(
+        PrivilegeGranted has "Global Administrator", "Critical",
+        PrivilegeGranted has "Privileged Role", "Critical",
+        PrivilegeGranted has_any ("Domain Admins", "Enterprise Admins"), "Critical",
+        "High"
+    ),
+    IsSelfElevation = TargetUser == InitiatedBy
+| project
+    TimeGenerated,
+    Severity,
+    AlertType,
+    TargetUser,
+    PrivilegeGranted,
+    InitiatedBy,
+    IsSelfElevation,
+    OperationName
+| order by TimeGenerated desc

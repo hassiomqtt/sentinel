@@ -1,0 +1,105 @@
+// MFA Bypass and Fatigue Attack Detection
+//
+// Detects attempts to bypass MFA including legacy auth abuse,
+// MFA fatigue attacks (push bombing), and suspicious MFA denials.
+//
+// Severity: High
+// Tactics: Credential Access, Initial Access
+// MITRE ATT&CK: T1111 (MFA Interception), T1621 (MFA Request Generation)
+
+let time_window = 24h;
+let mfa_fatigue_threshold = 5; // Number of MFA prompts in short period
+
+// Legacy Authentication Detection (bypasses MFA)
+let legacy_auth = SigninLogs
+| where TimeGenerated > ago(time_window)
+| where ClientAppUsed in ("Exchange ActiveSync", "IMAP4", "POP3", "SMTP", "Authenticated SMTP", "Other clients")
+    or ClientAppUsed has "legacy"
+| where ResultType == 0 // Successful
+| project
+    TimeGenerated,
+    ThreatType = "Legacy Auth Bypass",
+    UserPrincipalName,
+    UserDisplayName,
+    IPAddress,
+    Location = strcat(LocationDetails.city, ", ", LocationDetails.countryOrRegion),
+    ClientApp = ClientAppUsed,
+    AppDisplayName,
+    Severity = "High";
+
+// MFA Fatigue Attack Detection (multiple prompts in short period)
+let mfa_fatigue = SigninLogs
+| where TimeGenerated > ago(time_window)
+| where ResultType == 50074 // MFA required
+    or ResultType == 50076 // MFA required (strong auth)
+    or Status.additionalDetails has "MFA"
+| summarize
+    MFAPromptCount = count(),
+    UniqueIPs = dcount(IPAddress),
+    IPAddresses = make_set(IPAddress, 5),
+    TimeSpanMinutes = datetime_diff('minute', max(TimeGenerated), min(TimeGenerated))
+    by UserPrincipalName, UserDisplayName, bin(TimeGenerated, 15m)
+| where MFAPromptCount >= mfa_fatigue_threshold
+| where TimeSpanMinutes < 30 // Many prompts in short window
+| project
+    TimeGenerated,
+    ThreatType = "MFA Fatigue Attack",
+    UserPrincipalName,
+    UserDisplayName,
+    IPAddress = tostring(IPAddresses[0]),
+    Location = "",
+    ClientApp = "",
+    AppDisplayName = strcat(MFAPromptCount, " MFA prompts in ", TimeSpanMinutes, " minutes"),
+    Severity = case(
+        MFAPromptCount >= 10, "Critical",
+        "High"
+    );
+
+// MFA Denied followed by Success (potential fatigue success)
+let mfa_deny_then_success = SigninLogs
+| where TimeGenerated > ago(time_window)
+| where ResultType in (50074, 50076, 500121) // MFA challenges
+    or ResultType == 0 // Success
+| project TimeGenerated, UserPrincipalName, ResultType, IPAddress, AppDisplayName
+| order by UserPrincipalName, TimeGenerated asc
+| serialize
+| extend
+    PrevResult = prev(ResultType, 1),
+    PrevUser = prev(UserPrincipalName, 1),
+    PrevTime = prev(TimeGenerated, 1)
+| where UserPrincipalName == PrevUser
+| where ResultType == 0 and PrevResult in (50074, 50076, 500121)
+| where datetime_diff('minute', TimeGenerated, PrevTime) < 10
+| project
+    TimeGenerated,
+    ThreatType = "MFA Bypass After Denial",
+    UserPrincipalName,
+    UserDisplayName = "",
+    IPAddress,
+    Location = "",
+    ClientApp = "",
+    AppDisplayName,
+    Severity = "High";
+
+// Suspicious MFA Registration
+let mfa_registration = AuditLogs
+| where TimeGenerated > ago(time_window)
+| where OperationName has_any ("User registered security info", "User registered all required security info", "Admin registered security info")
+| extend
+    TargetUser = tostring(TargetResources[0].userPrincipalName),
+    InitiatedBy = tostring(InitiatedBy.user.userPrincipalName),
+    Method = tostring(TargetResources[0].modifiedProperties[0].newValue)
+| project
+    TimeGenerated,
+    ThreatType = "MFA Registration",
+    UserPrincipalName = TargetUser,
+    UserDisplayName = "",
+    IPAddress = tostring(InitiatedBy.user.ipAddress),
+    Location = "",
+    ClientApp = Method,
+    AppDisplayName = OperationName,
+    Severity = "Medium";
+
+// Combine all MFA bypass indicators
+union legacy_auth, mfa_fatigue, mfa_deny_then_success, mfa_registration
+| order by TimeGenerated desc

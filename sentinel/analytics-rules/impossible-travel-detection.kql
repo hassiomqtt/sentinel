@@ -1,0 +1,72 @@
+// Impossible Travel Detection
+//
+// Detects when a user signs in from two geographically distant locations
+// within a time period that would be physically impossible to travel.
+//
+// Severity: High
+// Tactics: Initial Access
+// MITRE ATT&CK: T1078 (Valid Accounts)
+
+let time_window = 24h;
+let min_distance_km = 500;
+let max_travel_speed_kmh = 1000; // Account for flights
+
+SigninLogs
+| where TimeGenerated > ago(time_window)
+| where ResultType == 0 // Successful logins only
+| where isnotempty(LocationDetails)
+| extend 
+    Latitude = toreal(LocationDetails.geoCoordinates.latitude),
+    Longitude = toreal(LocationDetails.geoCoordinates.longitude),
+    City = tostring(LocationDetails.city),
+    Country = tostring(LocationDetails.countryOrRegion)
+| where isnotnull(Latitude) and isnotnull(Longitude)
+| project 
+    TimeGenerated,
+    UserPrincipalName,
+    UserDisplayName,
+    IPAddress,
+    Latitude,
+    Longitude,
+    City,
+    Country,
+    AppDisplayName,
+    DeviceDetail
+| order by UserPrincipalName, TimeGenerated asc
+| serialize
+| extend 
+    PrevTime = prev(TimeGenerated, 1),
+    PrevLat = prev(Latitude, 1),
+    PrevLon = prev(Longitude, 1),
+    PrevCity = prev(City, 1),
+    PrevCountry = prev(Country, 1),
+    PrevUser = prev(UserPrincipalName, 1)
+| where UserPrincipalName == PrevUser
+| extend 
+    TimeDiffHours = datetime_diff('hour', TimeGenerated, PrevTime),
+    // Haversine formula for distance calculation
+    DistanceKm = 2 * 6371 * asin(sqrt(
+        pow(sin(radians((Latitude - PrevLat) / 2)), 2) +
+        cos(radians(PrevLat)) * cos(radians(Latitude)) *
+        pow(sin(radians((Longitude - PrevLon) / 2)), 2)
+    ))
+| where DistanceKm > min_distance_km
+| extend RequiredSpeedKmh = DistanceKm / TimeDiffHours
+| where RequiredSpeedKmh > max_travel_speed_kmh
+| project
+    TimeGenerated,
+    UserPrincipalName,
+    UserDisplayName,
+    CurrentLocation = strcat(City, ", ", Country),
+    PreviousLocation = strcat(PrevCity, ", ", PrevCountry),
+    DistanceKm = round(DistanceKm, 0),
+    TimeDiffHours,
+    RequiredSpeedKmh = round(RequiredSpeedKmh, 0),
+    CurrentIP = IPAddress,
+    AppDisplayName,
+    Severity = case(
+        RequiredSpeedKmh > 5000, "Critical",
+        RequiredSpeedKmh > 2000, "High",
+        "Medium"
+    )
+| order by RequiredSpeedKmh desc

@@ -1,0 +1,157 @@
+// Ransomware Indicator Detection
+//
+// Detects behaviors commonly associated with ransomware including mass file
+// encryption patterns, shadow copy deletion, and known ransomware indicators.
+//
+// Severity: Critical
+// Tactics: Impact
+// MITRE ATT&CK: T1486 (Data Encrypted for Impact), T1490 (Inhibit System Recovery)
+
+let time_window = 24h;
+
+// Shadow Copy Deletion (vssadmin, wmic shadowcopy)
+let shadow_copy_deletion = SecurityEvent
+| where TimeGenerated > ago(time_window)
+| where EventID == 4688 // Process Creation
+| extend CommandLine = tolower(CommandLine)
+| where CommandLine has_any (
+    "vssadmin delete shadows",
+    "wmic shadowcopy delete",
+    "bcdedit /set {default} recoveryenabled no",
+    "bcdedit /set {default} bootstatuspolicy ignoreallfailures",
+    "wbadmin delete catalog",
+    "wbadmin delete systemstatebackup"
+)
+| project
+    TimeGenerated,
+    Indicator = "Shadow Copy Deletion",
+    Computer,
+    Account,
+    CommandLine,
+    ParentProcessName,
+    Severity = "Critical";
+
+// Mass File Rename (encryption pattern)
+let mass_file_rename = DeviceFileEvents
+| where TimeGenerated > ago(time_window)
+| where ActionType == "FileRenamed"
+| extend 
+    OriginalExtension = extract(@"\.([^.]+)$", 1, PreviousFileName),
+    NewExtension = extract(@"\.([^.]+)$", 1, FileName)
+| where OriginalExtension != NewExtension
+| where NewExtension in (
+    "encrypted", "locked", "crypto", "crypt",
+    "enc", "crypted", "pays", "wallet", "wncry"
+) or strlen(NewExtension) > 10 // Unusually long extensions
+| summarize
+    RenamedFiles = count(),
+    Extensions = make_set(NewExtension, 10),
+    SampleFiles = make_set(FileName, 10)
+    by DeviceName, InitiatingProcessAccountName, bin(TimeGenerated, 10m)
+| where RenamedFiles > 50
+| project
+    TimeGenerated,
+    Indicator = "Mass File Encryption",
+    Computer = DeviceName,
+    Account = InitiatingProcessAccountName,
+    CommandLine = strcat(RenamedFiles, " files renamed to extensions: ", tostring(Extensions)),
+    ParentProcessName = "",
+    Severity = "Critical";
+
+// Ransomware Note Detection
+let ransom_notes = DeviceFileEvents
+| where TimeGenerated > ago(time_window)
+| where ActionType == "FileCreated"
+| where FileName matches regex @"(?i)(readme|decrypt|restore|recover|help|how.?to|ransom|locked|payment)"
+| where FileName endswith ".txt" or FileName endswith ".html" or FileName endswith ".hta"
+| summarize
+    NoteCount = count(),
+    Locations = make_set(FolderPath, 10)
+    by DeviceName, InitiatingProcessAccountName, FileName
+| where NoteCount > 5 // Same note in multiple locations
+| project
+    TimeGenerated = now(),
+    Indicator = "Ransom Note Created",
+    Computer = DeviceName,
+    Account = InitiatingProcessAccountName,
+    CommandLine = strcat("File '", FileName, "' created in ", NoteCount, " locations"),
+    ParentProcessName = "",
+    Severity = "Critical";
+
+// Known Ransomware Process Names
+let known_ransomware = SecurityEvent
+| where TimeGenerated > ago(time_window)
+| where EventID == 4688
+| extend ProcessName = tolower(NewProcessName)
+| where ProcessName has_any (
+    "ryuk", "conti", "lockbit", "revil", "sodinokibi",
+    "blackcat", "alphv", "hive", "blackmatter", "darkside",
+    "maze", "netwalker", "ragnar", "clop", "cuba"
+)
+| project
+    TimeGenerated,
+    Indicator = "Known Ransomware Process",
+    Computer,
+    Account,
+    CommandLine,
+    ParentProcessName,
+    Severity = "Critical";
+
+// Suspicious Encryption Tools
+let encryption_tools = SecurityEvent
+| where TimeGenerated > ago(time_window)
+| where EventID == 4688
+| extend CommandLine = tolower(CommandLine)
+| where CommandLine has_any (
+    "cipher /e",
+    "gpg --encrypt",
+    "openssl enc",
+    "7z a -p",
+    "winrar a -hp"
+) and CommandLine has_any ("/s", "-r", "recurse") // Recursive encryption
+| project
+    TimeGenerated,
+    Indicator = "Mass Encryption Tool",
+    Computer,
+    Account,
+    CommandLine,
+    ParentProcessName,
+    Severity = "High";
+
+// Disable Security Services
+let disable_security = SecurityEvent
+| where TimeGenerated > ago(time_window)
+| where EventID == 4688
+| extend CommandLine = tolower(CommandLine)
+| where CommandLine has_any (
+    "net stop",
+    "sc stop",
+    "taskkill"
+) and CommandLine has_any (
+    "defender",
+    "sophos",
+    "symantec",
+    "mcafee",
+    "kaspersky",
+    "avg",
+    "avast",
+    "eset",
+    "malwarebytes",
+    "vss",
+    "sql"
+)
+| project
+    TimeGenerated,
+    Indicator = "Security Service Disabled",
+    Computer,
+    Account,
+    CommandLine,
+    ParentProcessName,
+    Severity = "Critical";
+
+// Combine all ransomware indicators
+union shadow_copy_deletion, mass_file_rename, ransom_notes, known_ransomware, encryption_tools, disable_security
+| extend
+    AlertTitle = strcat("Ransomware Indicator: ", Indicator),
+    MITREAttack = "T1486, T1490"
+| order by TimeGenerated desc
