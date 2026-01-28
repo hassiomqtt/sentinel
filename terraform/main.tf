@@ -125,9 +125,10 @@ module "functions" {
   enable_vnet_integration = true
 
   # Configuration
-  key_vault_id               = module.key_vault.key_vault_id
-  log_analytics_workspace_id = module.sentinel.workspace_id
-  application_insights_key   = module.monitoring.application_insights_instrumentation_key
+  key_vault_id                           = module.key_vault.key_vault_id
+  log_analytics_workspace_id             = module.sentinel.workspace_id
+  application_insights_key               = module.monitoring.application_insights_instrumentation_key
+  application_insights_connection_string = module.monitoring.application_insights_connection_string
 
   # App settings
   app_settings = {
