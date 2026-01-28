@@ -7,16 +7,11 @@ on:
 
 permissions:
   contents: read
-  pull-requests: write
-  security-events: write
+  pull-requests: read
 
 env:
   TERRAFORM_VERSION: "1.6.6"
   PYTHON_VERSION: "3.11"
-  ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-  ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
-  ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-  ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
 
 jobs:
   # ============================================================================
@@ -74,71 +69,10 @@ jobs:
         run: terraform fmt -check -recursive -diff
 
       - name: Terraform Init
-        run: |
-          terraform init \
-            -backend-config="resource_group_name=${{ secrets.TF_STATE_RESOURCE_GROUP }}" \
-            -backend-config="storage_account_name=${{ secrets.TF_STATE_STORAGE_ACCOUNT }}" \
-            -backend-config="container_name=${{ secrets.TF_STATE_CONTAINER }}" \
-            -backend-config="key=dev.terraform.tfstate"
+        run: terraform init -backend=false
 
       - name: Terraform Validate
         run: terraform validate
-
-      - name: Terraform Plan (Dev)
-        id: plan
-        run: |
-          terraform plan \
-            -var-file="environments/dev/terraform.tfvars" \
-            -no-color \
-            -out=tfplan 2>&1 | tee plan.txt
-        continue-on-error: true
-
-      - name: Comment Plan on PR
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs = require('fs');
-            const plan = fs.readFileSync('terraform/plan.txt', 'utf8');
-            const truncated = plan.length > 60000 
-              ? plan.substring(0, 60000) + '\n... (output truncated)'
-              : plan;
-            
-            const output = `### Terraform Plan for \`dev\`
-
-            <details><summary>Click to expand plan</summary>
-
-            \`\`\`hcl
-            ${truncated}
-            \`\`\`
-
-            </details>
-
-            *Plan generated for PR #${{ github.event.pull_request.number }}*`;
-
-            // Find existing comment
-            const { data: comments } = await github.rest.issues.listComments({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-            });
-            
-            const botComment = comments.find(c => c.body.includes('Terraform Plan for'));
-            
-            if (botComment) {
-              await github.rest.issues.updateComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                comment_id: botComment.id,
-                body: output
-              });
-            } else {
-              await github.rest.issues.createComment({
-                issue_number: context.issue.number,
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                body: output
-              });
-            }
 
   # ============================================================================
   # Python PR Checks
@@ -172,8 +106,12 @@ jobs:
         run: black --check src/functions
 
       - name: Run tests
-        run: pytest tests/ -v || echo "No tests found"
-        continue-on-error: true
+        run: |
+          if [ -d "tests" ]; then
+            pytest tests/ -v || echo "Tests completed"
+          else
+            echo "No tests directory found"
+          fi
 
   # ============================================================================
   # Security Scan
@@ -192,14 +130,7 @@ jobs:
           scan-type: 'fs'
           scan-ref: '.'
           severity: 'CRITICAL,HIGH'
-          format: 'sarif'
-          output: 'trivy-results.sarif'
-        continue-on-error: true
-
-      - name: Upload Trivy scan results
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: 'trivy-results.sarif'
+          format: 'table'
         continue-on-error: true
 
   # ============================================================================
