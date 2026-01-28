@@ -7,6 +7,10 @@ on:
     branches: [main, develop]
   workflow_dispatch:
 
+permissions:
+  contents: read
+  pull-requests: write
+
 env:
   TERRAFORM_VERSION: "1.6.6"
   PYTHON_VERSION: "3.11"
@@ -27,6 +31,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
@@ -168,15 +174,18 @@ jobs:
       - name: Validate KQL files exist
         run: |
           echo "Checking KQL analytics rules..."
-          find sentinel/analytics-rules -name "*.kql" -type f | while read file; do
-            echo "✓ Found: $file"
-            # Basic syntax check: ensure file is not empty and has valid structure
-            if [ ! -s "$file" ]; then
-              echo "✗ Error: $file is empty"
-              exit 1
-            fi
-          done
-          echo "KQL validation complete"
+          if [ -d "sentinel/analytics-rules" ]; then
+            find sentinel/analytics-rules -name "*.kql" -type f | while read file; do
+              echo "Found: $file"
+              if [ ! -s "$file" ]; then
+                echo "Error: $file is empty"
+                exit 1
+              fi
+            done
+            echo "KQL validation complete"
+          else
+            echo "No sentinel/analytics-rules directory found, skipping"
+          fi
 
   # ============================================================================
   # Summary Job
