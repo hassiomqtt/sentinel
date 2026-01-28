@@ -50,14 +50,41 @@ resource "azurerm_role_assignment" "kv_admin" {
 }
 
 ## Variables
-variable "resource_group_name" { type = string }
-variable "location" { type = string }
-variable "environment" { type = string }
-variable "tenant_id" { type = string }
-variable "enable_private_endpoint" { type = bool; default = true }
-variable "subnet_id" { type = string; default = "" }
-variable "admin_object_ids" { type = list(string); default = [] }
-variable "tags" { type = map(string); default = {} }
+variable "resource_group_name" {
+  type = string
+}
+
+variable "location" {
+  type = string
+}
+
+variable "environment" {
+  type = string
+}
+
+variable "tenant_id" {
+  type = string
+}
+
+variable "enable_private_endpoint" {
+  type    = bool
+  default = true
+}
+
+variable "subnet_id" {
+  type    = string
+  default = ""
+}
+
+variable "admin_object_ids" {
+  type    = list(string)
+  default = []
+}
+
+variable "tags" {
+  type    = map(string)
+  default = {}
+}
 
 ## Outputs
 output "key_vault_id" { value = azurerm_key_vault.main.id }

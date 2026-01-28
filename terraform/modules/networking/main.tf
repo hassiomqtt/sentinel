@@ -56,14 +56,39 @@ resource "azurerm_subnet_network_security_group_association" "functions" {
 }
 
 ## Variables
-variable "resource_group_name" { type = string }
-variable "location" { type = string }
-variable "environment" { type = string }
-variable "vnet_address_space" { type = list(string) }
-variable "function_subnet_prefix" { type = string }
-variable "private_endpoint_subnet_prefix" { type = string }
-variable "enable_ddos_protection" { type = bool; default = false }
-variable "tags" { type = map(string); default = {} }
+variable "resource_group_name" {
+  type = string
+}
+
+variable "location" {
+  type = string
+}
+
+variable "environment" {
+  type = string
+}
+
+variable "vnet_address_space" {
+  type = list(string)
+}
+
+variable "function_subnet_prefix" {
+  type = string
+}
+
+variable "private_endpoint_subnet_prefix" {
+  type = string
+}
+
+variable "enable_ddos_protection" {
+  type    = bool
+  default = false
+}
+
+variable "tags" {
+  type    = map(string)
+  default = {}
+}
 
 ## Outputs
 output "vnet_id" { value = azurerm_virtual_network.main.id }

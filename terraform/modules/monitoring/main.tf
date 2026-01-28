@@ -49,14 +49,40 @@ resource "azurerm_monitor_metric_alert" "high_threat_score" {
 }
 
 ## Variables
-variable "resource_group_name" { type = string }
-variable "location" { type = string }
-variable "environment" { type = string }
-variable "log_analytics_workspace_id" { type = string }
-variable "enable_mttr_dashboard" { type = bool; default = true }
-variable "enable_cost_analysis" { type = bool; default = true }
-variable "alert_email" { type = string }
-variable "tags" { type = map(string); default = {} }
+variable "resource_group_name" {
+  type = string
+}
+
+variable "location" {
+  type = string
+}
+
+variable "environment" {
+  type = string
+}
+
+variable "log_analytics_workspace_id" {
+  type = string
+}
+
+variable "enable_mttr_dashboard" {
+  type    = bool
+  default = true
+}
+
+variable "enable_cost_analysis" {
+  type    = bool
+  default = true
+}
+
+variable "alert_email" {
+  type = string
+}
+
+variable "tags" {
+  type    = map(string)
+  default = {}
+}
 
 ## Outputs
 output "application_insights_id" { value = azurerm_application_insights.main.id }

@@ -55,15 +55,45 @@ resource "azurerm_logic_app_workflow" "config_drift" {
 }
 
 ## Variables
-variable "resource_group_name" { type = string }
-variable "location" { type = string }
-variable "environment" { type = string }
-variable "sentinel_workspace_id" { type = string }
-variable "functions_app_name" { type = string }
-variable "key_vault_id" { type = string }
-variable "teams_webhook_uri" { type = string; default = ""; sensitive = true }
-variable "security_email" { type = string; default = "" }
-variable "tags" { type = map(string); default = {} }
+variable "resource_group_name" {
+  type = string
+}
+
+variable "location" {
+  type = string
+}
+
+variable "environment" {
+  type = string
+}
+
+variable "sentinel_workspace_id" {
+  type = string
+}
+
+variable "functions_app_name" {
+  type = string
+}
+
+variable "key_vault_id" {
+  type = string
+}
+
+variable "teams_webhook_uri" {
+  type      = string
+  default   = ""
+  sensitive = true
+}
+
+variable "security_email" {
+  type    = string
+  default = ""
+}
+
+variable "tags" {
+  type    = map(string)
+  default = {}
+}
 
 ## Outputs
 output "credential_compromise_workflow_id" { value = azurerm_logic_app_workflow.credential_compromise.id }
