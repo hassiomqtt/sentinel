@@ -23,9 +23,9 @@ variable "tags" {
   description = "Tags to apply to all resources"
   type        = map(string)
   default = {
-    Project     = "Sentinel-Remediation"
-    ManagedBy   = "Terraform"
-    CostCenter  = "Security"
+    Project    = "Sentinel-Remediation"
+    ManagedBy  = "Terraform"
+    CostCenter = "Security"
   }
 }
 

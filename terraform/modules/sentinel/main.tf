@@ -73,7 +73,7 @@ resource "azurerm_sentinel_automation_rule" "credential_compromise" {
   actions {
     action_type = "ModifyProperties"
     order       = 1
-    
+
     dynamic "modify_properties" {
       for_each = [1]
       content {
@@ -104,7 +104,7 @@ resource "azurerm_sentinel_automation_rule" "suspicious_access" {
   actions {
     action_type = "ModifyProperties"
     order       = 1
-    
+
     dynamic "modify_properties" {
       for_each = [1]
       content {
@@ -123,7 +123,7 @@ resource "azurerm_sentinel_alert_rule_scheduled" "failed_login_spike" {
   description                = "Detects abnormal increase in failed login attempts"
   severity                   = "High"
   enabled                    = true
-  
+
   query = <<-QUERY
     SigninLogs
     | where TimeGenerated > ago(1h)
@@ -134,11 +134,11 @@ resource "azurerm_sentinel_alert_rule_scheduled" "failed_login_spike" {
     | where ThreatScore > 50
   QUERY
 
-  query_frequency            = "PT15M"
-  query_period               = "PT1H"
-  trigger_operator           = "GreaterThan"
-  trigger_threshold          = 0
-  suppression_enabled        = false
+  query_frequency     = "PT15M"
+  query_period        = "PT1H"
+  trigger_operator    = "GreaterThan"
+  trigger_threshold   = 0
+  suppression_enabled = false
 
   event_grouping {
     aggregation_method = "AlertPerResult"
@@ -146,7 +146,7 @@ resource "azurerm_sentinel_alert_rule_scheduled" "failed_login_spike" {
 
   incident_configuration {
     create_incident = true
-    
+
     grouping {
       enabled                 = true
       lookback_duration       = "PT6H"
@@ -156,10 +156,10 @@ resource "azurerm_sentinel_alert_rule_scheduled" "failed_login_spike" {
   }
 
   alert_details_override {
-    display_name_format   = "Failed Login Spike: {{UserPrincipalName}}"
-    description_format    = "Detected {{FailedAttempts}} failed attempts from {{IPAddress}}"
-    severity_column_name  = "ThreatScore"
-    tactics_column_name   = "Tactic"
+    display_name_format  = "Failed Login Spike: {{UserPrincipalName}}"
+    description_format   = "Detected {{FailedAttempts}} failed attempts from {{IPAddress}}"
+    severity_column_name = "ThreatScore"
+    tactics_column_name  = "Tactic"
   }
 }
 
@@ -170,7 +170,7 @@ resource "azurerm_sentinel_alert_rule_scheduled" "unusual_location_login" {
   description                = "Detects login attempts from locations not seen in the past 30 days"
   severity                   = "Medium"
   enabled                    = true
-  
+
   query = <<-QUERY
     let historical_locations = SigninLogs
     | where TimeGenerated between (ago(30d) .. ago(1d))
@@ -183,11 +183,11 @@ resource "azurerm_sentinel_alert_rule_scheduled" "unusual_location_login" {
     | extend ThreatScore = 60
   QUERY
 
-  query_frequency            = "PT1H"
-  query_period               = "P30D"
-  trigger_operator           = "GreaterThan"
-  trigger_threshold          = 0
-  suppression_enabled        = false
+  query_frequency     = "PT1H"
+  query_period        = "P30D"
+  trigger_operator    = "GreaterThan"
+  trigger_threshold   = 0
+  suppression_enabled = false
 
   event_grouping {
     aggregation_method = "AlertPerResult"
@@ -195,7 +195,7 @@ resource "azurerm_sentinel_alert_rule_scheduled" "unusual_location_login" {
 
   incident_configuration {
     create_incident = true
-    
+
     grouping {
       enabled                 = true
       lookback_duration       = "PT12H"

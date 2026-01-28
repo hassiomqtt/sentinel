@@ -1,6 +1,6 @@
 terraform {
   required_version = ">= 1.6.0"
-  
+
   required_providers {
     azurerm = {
       source  = "hashicorp/azurerm"
@@ -62,13 +62,13 @@ resource "azurerm_resource_group" "main" {
 module "networking" {
   source = "./modules/networking"
 
-  resource_group_name          = azurerm_resource_group.main.name
-  location                     = var.location
-  environment                  = var.environment
-  vnet_address_space          = var.vnet_address_space
-  function_subnet_prefix       = var.function_subnet_prefix
+  resource_group_name            = azurerm_resource_group.main.name
+  location                       = var.location
+  environment                    = var.environment
+  vnet_address_space             = var.vnet_address_space
+  function_subnet_prefix         = var.function_subnet_prefix
   private_endpoint_subnet_prefix = var.private_endpoint_subnet_prefix
-  enable_ddos_protection       = var.enable_ddos_protection
+  enable_ddos_protection         = var.enable_ddos_protection
 
   tags = var.tags
 }
@@ -77,13 +77,13 @@ module "networking" {
 module "key_vault" {
   source = "./modules/key-vault"
 
-  resource_group_name      = azurerm_resource_group.main.name
-  location                 = var.location
-  environment              = var.environment
-  tenant_id                = data.azurerm_client_config.current.tenant_id
-  enable_private_endpoint  = var.enable_private_endpoints
-  subnet_id                = module.networking.private_endpoint_subnet_id
-  
+  resource_group_name     = azurerm_resource_group.main.name
+  location                = var.location
+  environment             = var.environment
+  tenant_id               = data.azurerm_client_config.current.tenant_id
+  enable_private_endpoint = var.enable_private_endpoints
+  subnet_id               = module.networking.private_endpoint_subnet_id
+
   # Access policies
   admin_object_ids = var.admin_object_ids
 
@@ -94,17 +94,17 @@ module "key_vault" {
 module "sentinel" {
   source = "./modules/sentinel"
 
-  resource_group_name     = azurerm_resource_group.main.name
-  location                = var.location
-  environment             = var.environment
-  workspace_name          = var.sentinel_workspace_name
-  retention_days          = var.sentinel_retention_days
-  daily_quota_gb          = var.sentinel_daily_quota_gb
-  
+  resource_group_name = azurerm_resource_group.main.name
+  location            = var.location
+  environment         = var.environment
+  workspace_name      = var.sentinel_workspace_name
+  retention_days      = var.sentinel_retention_days
+  daily_quota_gb      = var.sentinel_daily_quota_gb
+
   # Data connectors
-  enable_azure_activity   = var.enable_azure_activity_connector
-  enable_azure_ad         = var.enable_azure_ad_connector
-  enable_security_center  = var.enable_security_center_connector
+  enable_azure_activity  = var.enable_azure_activity_connector
+  enable_azure_ad        = var.enable_azure_ad_connector
+  enable_security_center = var.enable_security_center_connector
 
   tags = var.tags
 }
@@ -113,21 +113,21 @@ module "sentinel" {
 module "functions" {
   source = "./modules/functions"
 
-  resource_group_name       = azurerm_resource_group.main.name
-  location                  = var.location
-  environment               = var.environment
-  app_name                  = var.functions_app_name
-  runtime                   = var.functions_runtime
-  runtime_version           = var.functions_runtime_version
-  
+  resource_group_name = azurerm_resource_group.main.name
+  location            = var.location
+  environment         = var.environment
+  app_name            = var.functions_app_name
+  runtime             = var.functions_runtime
+  runtime_version     = var.functions_runtime_version
+
   # Networking
-  subnet_id                 = module.networking.function_subnet_id
-  enable_vnet_integration   = true
-  
+  subnet_id               = module.networking.function_subnet_id
+  enable_vnet_integration = true
+
   # Configuration
-  key_vault_id              = module.key_vault.key_vault_id
+  key_vault_id               = module.key_vault.key_vault_id
   log_analytics_workspace_id = module.sentinel.workspace_id
-  application_insights_key  = module.monitoring.application_insights_instrumentation_key
+  application_insights_key   = module.monitoring.application_insights_instrumentation_key
 
   # App settings
   app_settings = {
@@ -154,18 +154,18 @@ module "functions" {
 module "logic_apps" {
   source = "./modules/logic-apps"
 
-  resource_group_name          = azurerm_resource_group.main.name
-  location                     = var.location
-  environment                  = var.environment
-  
+  resource_group_name = azurerm_resource_group.main.name
+  location            = var.location
+  environment         = var.environment
+
   # Integration
-  sentinel_workspace_id        = module.sentinel.workspace_id
-  functions_app_name           = module.functions.function_app_name
-  key_vault_id                 = module.key_vault.key_vault_id
-  
+  sentinel_workspace_id = module.sentinel.workspace_id
+  functions_app_name    = module.functions.function_app_name
+  key_vault_id          = module.key_vault.key_vault_id
+
   # Notification settings
-  teams_webhook_uri            = var.teams_webhook_uri
-  security_email               = var.security_email
+  teams_webhook_uri = var.teams_webhook_uri
+  security_email    = var.security_email
 
   tags = var.tags
 
@@ -179,15 +179,15 @@ module "logic_apps" {
 module "monitoring" {
   source = "./modules/monitoring"
 
-  resource_group_name     = azurerm_resource_group.main.name
-  location                = var.location
-  environment             = var.environment
+  resource_group_name        = azurerm_resource_group.main.name
+  location                   = var.location
+  environment                = var.environment
   log_analytics_workspace_id = module.sentinel.workspace_id
-  
+
   # Metrics and alerts
-  enable_mttr_dashboard   = true
-  enable_cost_analysis    = true
-  alert_email             = var.security_email
+  enable_mttr_dashboard = true
+  enable_cost_analysis  = true
+  alert_email           = var.security_email
 
   tags = var.tags
 }
@@ -256,7 +256,7 @@ output "application_insights_instrumentation_key" {
 
 output "deployment_instructions" {
   description = "Next steps for deployment"
-  value = <<-EOT
+  value       = <<-EOT
     Deployment completed successfully!
     
     Next steps:

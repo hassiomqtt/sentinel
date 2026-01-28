@@ -9,7 +9,7 @@ resource "azurerm_storage_account" "functions" {
   account_replication_type = "LRS"
   min_tls_version          = "TLS1_2"
 
-  enable_https_traffic_only      = true
+  enable_https_traffic_only       = true
   allow_nested_items_to_be_public = false
 
   network_rules {
@@ -55,7 +55,7 @@ resource "azurerm_linux_function_app" "main" {
     always_on                              = true
     application_insights_connection_string = var.application_insights_connection_string
     application_insights_key               = var.application_insights_key
-    
+
     application_stack {
       python_version = var.runtime_version
     }
@@ -64,30 +64,30 @@ resource "azurerm_linux_function_app" "main" {
       allowed_origins = []
     }
 
-    ftps_state                = "Disabled"
-    http2_enabled             = true
-    minimum_tls_version       = "1.2"
-    use_32_bit_worker         = false
-    vnet_route_all_enabled    = var.enable_vnet_integration
+    ftps_state             = "Disabled"
+    http2_enabled          = true
+    minimum_tls_version    = "1.2"
+    use_32_bit_worker      = false
+    vnet_route_all_enabled = var.enable_vnet_integration
   }
 
   app_settings = merge(
     var.app_settings,
     {
-      FUNCTIONS_WORKER_RUNTIME              = var.runtime
-      WEBSITE_RUN_FROM_PACKAGE              = "1"
-      AzureWebJobsDisableHomepage           = "true"
-      ENABLE_ORYX_BUILD                     = "true"
-      SCM_DO_BUILD_DURING_DEPLOYMENT        = "true"
-      
+      FUNCTIONS_WORKER_RUNTIME       = var.runtime
+      WEBSITE_RUN_FROM_PACKAGE       = "1"
+      AzureWebJobsDisableHomepage    = "true"
+      ENABLE_ORYX_BUILD              = "true"
+      SCM_DO_BUILD_DURING_DEPLOYMENT = "true"
+
       # Python specific
-      PYTHON_ENABLE_WORKER_EXTENSIONS       = "1"
-      PYTHON_ISOLATE_WORKER_DEPENDENCIES    = "1"
-      
+      PYTHON_ENABLE_WORKER_EXTENSIONS    = "1"
+      PYTHON_ISOLATE_WORKER_DEPENDENCIES = "1"
+
       # Storage
-      AzureWebJobsStorage                   = azurerm_storage_account.functions.primary_connection_string
+      AzureWebJobsStorage                      = azurerm_storage_account.functions.primary_connection_string
       WEBSITE_CONTENTAZUREFILECONNECTIONSTRING = azurerm_storage_account.functions.primary_connection_string
-      WEBSITE_CONTENTSHARE                  = lower(var.app_name)
+      WEBSITE_CONTENTSHARE                     = lower(var.app_name)
     }
   )
 
