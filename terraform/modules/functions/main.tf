@@ -9,7 +9,7 @@ resource "azurerm_storage_account" "functions" {
   account_replication_type = "LRS"
   min_tls_version          = "TLS1_2"
 
-  enable_https_traffic_only       = true
+  https_traffic_only_enabled      = true
   allow_nested_items_to_be_public = false
 
   network_rules {
@@ -96,12 +96,7 @@ resource "azurerm_linux_function_app" "main" {
   }
 
   # VNet Integration
-  dynamic "virtual_network_subnet_id" {
-    for_each = var.enable_vnet_integration ? [1] : []
-    content {
-      subnet_id = var.subnet_id
-    }
-  }
+  virtual_network_subnet_id = var.enable_vnet_integration ? var.subnet_id : null
 
   https_only = true
 

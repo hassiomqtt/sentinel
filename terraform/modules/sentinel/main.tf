@@ -60,27 +60,23 @@ resource "azurerm_sentinel_automation_rule" "credential_compromise" {
   order                      = 1
   enabled                    = true
 
-  triggers {
-    when = "Created"
-  }
-
-  condition {
-    property = "IncidentTitle"
-    operator = "Contains"
-    values   = ["Credential", "Password", "Authentication"]
-  }
-
-  actions {
-    action_type = "ModifyProperties"
-    order       = 1
-
-    dynamic "modify_properties" {
-      for_each = [1]
-      content {
-        status   = "Active"
-        severity = "High"
+  condition_json = jsonencode({
+    clauses = [
+      {
+        conditionProperties = {
+          propertyName   = "IncidentTitle"
+          operator       = "Contains"
+          propertyValues = ["Credential", "Password", "Authentication"]
+        }
+        conditionType = "Property"
       }
-    }
+    ]
+    operator = "And"
+  })
+
+  action_incident {
+    order  = 1
+    status = "Active"
   }
 }
 
@@ -91,27 +87,23 @@ resource "azurerm_sentinel_automation_rule" "suspicious_access" {
   order                      = 2
   enabled                    = true
 
-  triggers {
-    when = "Created"
-  }
-
-  condition {
-    property = "IncidentTitle"
-    operator = "Contains"
-    values   = ["Suspicious", "Anomalous", "Unusual"]
-  }
-
-  actions {
-    action_type = "ModifyProperties"
-    order       = 1
-
-    dynamic "modify_properties" {
-      for_each = [1]
-      content {
-        status   = "Active"
-        severity = "Medium"
+  condition_json = jsonencode({
+    clauses = [
+      {
+        conditionProperties = {
+          propertyName   = "IncidentTitle"
+          operator       = "Contains"
+          propertyValues = ["Suspicious", "Anomalous", "Unusual"]
+        }
+        conditionType = "Property"
       }
-    }
+    ]
+    operator = "And"
+  })
+
+  action_incident {
+    order  = 1
+    status = "Active"
   }
 }
 
@@ -173,7 +165,7 @@ resource "azurerm_sentinel_alert_rule_scheduled" "unusual_location_login" {
 
   query = <<-QUERY
     let historical_locations = SigninLogs
-    | where TimeGenerated between (ago(30d) .. ago(1d))
+    | where TimeGenerated between (ago(14d) .. ago(1d))
     | where ResultType == 0
     | summarize by UserPrincipalName, Location;
     SigninLogs
@@ -184,7 +176,7 @@ resource "azurerm_sentinel_alert_rule_scheduled" "unusual_location_login" {
   QUERY
 
   query_frequency     = "PT1H"
-  query_period        = "P30D"
+  query_period        = "P14D"
   trigger_operator    = "GreaterThan"
   trigger_threshold   = 0
   suppression_enabled = false
