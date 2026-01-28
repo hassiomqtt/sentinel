@@ -1,0 +1,141 @@
+// Service Principal Abuse Detection
+//
+// Detects suspicious service principal activity including credential theft,
+// permission escalation, and unusual application behavior.
+//
+// Severity: High to Critical
+// Tactics: Credential Access, Privilege Escalation
+// MITRE ATT&CK: T1098.001 (Additional Cloud Credentials), T1078.004 (Cloud Accounts)
+
+let time_window = 24h;
+
+// New Service Principal Credentials Added
+let new_credentials = AuditLogs
+| where TimeGenerated > ago(time_window)
+| where OperationName in (
+    "Add service principal credentials",
+    "Update application - Certificates and secrets management"
+)
+| extend
+    AppId = tostring(TargetResources[0].id),
+    AppName = tostring(TargetResources[0].displayName),
+    InitiatedBy = coalesce(
+        tostring(InitiatedBy.user.userPrincipalName),
+        tostring(InitiatedBy.app.displayName)
+    ),
+    InitiatedByIP = tostring(InitiatedBy.user.ipAddress)
+| project
+    TimeGenerated,
+    ThreatType = "New SP Credentials",
+    AppId,
+    AppName,
+    InitiatedBy,
+    InitiatedByIP,
+    OperationName,
+    Result,
+    Severity = "High";
+
+// Service Principal Permission Changes
+let permission_changes = AuditLogs
+| where TimeGenerated > ago(time_window)
+| where OperationName has_any (
+    "Add app role assignment to service principal",
+    "Add delegated permission grant",
+    "Add application permissions",
+    "Consent to application"
+)
+| extend
+    AppId = tostring(TargetResources[0].id),
+    AppName = tostring(TargetResources[0].displayName),
+    PermissionAdded = tostring(TargetResources[0].modifiedProperties[0].newValue),
+    InitiatedBy = coalesce(
+        tostring(InitiatedBy.user.userPrincipalName),
+        tostring(InitiatedBy.app.displayName)
+    ),
+    InitiatedByIP = tostring(InitiatedBy.user.ipAddress)
+| project
+    TimeGenerated,
+    ThreatType = "SP Permission Change",
+    AppId,
+    AppName,
+    InitiatedBy,
+    InitiatedByIP,
+    OperationName,
+    Result,
+    Severity = case(
+        PermissionAdded has_any ("Directory.ReadWrite.All", "RoleManagement.ReadWrite.Directory"), "Critical",
+        PermissionAdded has_any (".ReadWrite", "FullControl"), "High",
+        "Medium"
+    );
+
+// Service Principal Sign-ins from Unusual Locations
+let sp_unusual_locations = AADServicePrincipalSignInLogs
+| where TimeGenerated > ago(time_window)
+| where ResultType == 0
+| extend Location = strcat(LocationDetails.city, ", ", LocationDetails.countryOrRegion)
+| summarize
+    Locations = make_set(Location),
+    IPs = make_set(IPAddress),
+    SignInCount = count()
+    by ServicePrincipalId, ServicePrincipalName
+| where array_length(Locations) > 3
+| mv-expand Location = Locations, IP = IPs
+| project
+    TimeGenerated = now(),
+    ThreatType = "SP Unusual Locations",
+    AppId = ServicePrincipalId,
+    AppName = ServicePrincipalName,
+    InitiatedBy = "Service Principal",
+    InitiatedByIP = tostring(IP),
+    OperationName = strcat("Sign-ins from ", array_length(Locations), " locations"),
+    Result = "Success",
+    Severity = "Medium";
+
+// High Volume Service Principal Activity
+let high_volume_activity = AADServicePrincipalSignInLogs
+| where TimeGenerated > ago(time_window)
+| where ResultType == 0
+| summarize
+    SignInCount = count(),
+    UniqueResources = dcount(ResourceDisplayName),
+    Resources = make_set(ResourceDisplayName, 10)
+    by ServicePrincipalId, ServicePrincipalName, bin(TimeGenerated, 1h)
+| where SignInCount > 1000 or UniqueResources > 20
+| project
+    TimeGenerated,
+    ThreatType = "SP High Volume Activity",
+    AppId = ServicePrincipalId,
+    AppName = ServicePrincipalName,
+    InitiatedBy = "Service Principal",
+    InitiatedByIP = "",
+    OperationName = strcat(SignInCount, " sign-ins to ", UniqueResources, " resources"),
+    Result = "Success",
+    Severity = case(
+        SignInCount > 5000, "High",
+        UniqueResources > 50, "High",
+        "Medium"
+    );
+
+// First-time Service Principal Activity
+let baseline = AADServicePrincipalSignInLogs
+| where TimeGenerated between (ago(30d) .. ago(1d))
+| summarize FirstSeen = min(TimeGenerated) by ServicePrincipalId;
+
+let new_sp_activity = AADServicePrincipalSignInLogs
+| where TimeGenerated > ago(time_window)
+| where ResultType == 0
+| join kind=leftanti (baseline) on ServicePrincipalId
+| project
+    TimeGenerated,
+    ThreatType = "New SP Activity",
+    AppId = ServicePrincipalId,
+    AppName = ServicePrincipalName,
+    InitiatedBy = "Service Principal",
+    InitiatedByIP = IPAddress,
+    OperationName = strcat("First activity accessing ", ResourceDisplayName),
+    Result = "Success",
+    Severity = "Medium";
+
+// Combine all service principal threats
+union new_credentials, permission_changes, sp_unusual_locations, high_volume_activity, new_sp_activity
+| order by TimeGenerated desc

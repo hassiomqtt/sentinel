@@ -1,0 +1,93 @@
+// Suspicious PowerShell Execution Detection
+//
+// Detects potentially malicious PowerShell activity including encoded commands,
+// download cradles, AMSI bypass attempts, and obfuscation techniques.
+//
+// Severity: Medium to Critical
+// Tactics: Execution, Defense Evasion
+// MITRE ATT&CK: T1059.001 (PowerShell), T1027 (Obfuscated Files)
+
+let suspicious_patterns = dynamic([
+    "-encodedcommand",
+    "-enc ",
+    "-e ",
+    "frombase64string",
+    "downloadstring",
+    "downloadfile",
+    "invoke-webrequest",
+    "iwr ",
+    "wget ",
+    "curl ",
+    "invoke-expression",
+    "iex ",
+    "invoke-command",
+    "icm ",
+    "new-object net.webclient",
+    "bitstransfer",
+    "invoke-shellcode",
+    "invoke-mimikatz",
+    "invoke-bloodhound",
+    "get-credential",
+    "securestring",
+    "convertto-securestring",
+    "bypass",
+    "unrestricted",
+    "hidden",
+    "-nop",
+    "-noprofile",
+    "-windowstyle hidden",
+    "-w hidden",
+    "reflection.assembly",
+    "system.io.compression",
+    "gzipstream",
+    "memorystream"
+]);
+
+let amsi_bypass_patterns = dynamic([
+    "amsiutils",
+    "amsiinitfailed",
+    "amsicontext",
+    "amsiscanbuffer",
+    "set-mppreference",
+    "disablerealtimemonitoring"
+]);
+
+SecurityEvent
+| where TimeGenerated > ago(24h)
+| where EventID == 4104 // PowerShell Script Block Logging
+| extend ScriptBlock = tolower(EventData)
+| where ScriptBlock has_any (suspicious_patterns) or ScriptBlock has_any (amsi_bypass_patterns)
+| extend
+    HasEncodedCommand = ScriptBlock has_any ("-encodedcommand", "-enc ", "frombase64string"),
+    HasDownloadCradle = ScriptBlock has_any ("downloadstring", "downloadfile", "invoke-webrequest", "webclient"),
+    HasAMSIBypass = ScriptBlock has_any (amsi_bypass_patterns),
+    HasObfuscation = ScriptBlock has_any ("char]", "join", "-replace", "-split", "`"),
+    HasCredentialAccess = ScriptBlock has_any ("get-credential", "securestring", "mimikatz")
+| extend 
+    ThreatScore = toint(
+        (HasEncodedCommand * 25) +
+        (HasDownloadCradle * 30) +
+        (HasAMSIBypass * 40) +
+        (HasObfuscation * 15) +
+        (HasCredentialAccess * 35)
+    )
+| extend
+    Severity = case(
+        ThreatScore >= 80, "Critical",
+        ThreatScore >= 50, "High",
+        ThreatScore >= 25, "Medium",
+        "Low"
+    )
+| project
+    TimeGenerated,
+    Computer,
+    Account,
+    Severity,
+    ThreatScore,
+    HasEncodedCommand,
+    HasDownloadCradle,
+    HasAMSIBypass,
+    HasObfuscation,
+    HasCredentialAccess,
+    ScriptBlockPreview = substring(ScriptBlock, 0, 500)
+| order by ThreatScore desc
