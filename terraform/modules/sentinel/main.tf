@@ -1,5 +1,9 @@
 # Sentinel Module - Log Analytics Workspace and Sentinel Configuration
 
+# Generate UUIDs for automation rule names
+resource "random_uuid" "credential_compromise_rule" {}
+resource "random_uuid" "suspicious_access_rule" {}
+
 resource "azurerm_log_analytics_workspace" "sentinel" {
   name                = var.workspace_name
   location            = var.location
@@ -54,7 +58,7 @@ resource "azurerm_sentinel_data_connector_microsoft_cloud_app_security" "mcas" {
 
 # Automation Rules for triggering Logic Apps
 resource "azurerm_sentinel_automation_rule" "credential_compromise" {
-  name                       = "CredentialCompromiseAutomation"
+  name                       = random_uuid.credential_compromise_rule.result
   log_analytics_workspace_id = azurerm_log_analytics_solution.sentinel.workspace_resource_id
   display_name               = "Credential Compromise - Auto Remediation"
   order                      = 1
@@ -81,7 +85,7 @@ resource "azurerm_sentinel_automation_rule" "credential_compromise" {
 }
 
 resource "azurerm_sentinel_automation_rule" "suspicious_access" {
-  name                       = "SuspiciousAccessAutomation"
+  name                       = random_uuid.suspicious_access_rule.result
   log_analytics_workspace_id = azurerm_log_analytics_solution.sentinel.workspace_resource_id
   display_name               = "Suspicious Access Pattern - Auto Remediation"
   order                      = 2
@@ -136,8 +140,8 @@ resource "azurerm_sentinel_alert_rule_scheduled" "failed_login_spike" {
     aggregation_method = "AlertPerResult"
   }
 
-  incident_configuration {
-    create_incident = true
+  incident {
+    create_incident_enabled = true
 
     grouping {
       enabled                 = true
@@ -185,8 +189,8 @@ resource "azurerm_sentinel_alert_rule_scheduled" "unusual_location_login" {
     aggregation_method = "AlertPerResult"
   }
 
-  incident_configuration {
-    create_incident = true
+  incident {
+    create_incident_enabled = true
 
     grouping {
       enabled                 = true
